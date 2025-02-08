@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 271 86% 18%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 271 86% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 271 86% 18%;
+
+    --primary: 271 86% 18%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 271 86% 18%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 271 20% 95%;
+    --muted-foreground: 271 20% 40%;
+
+    --accent: 45 100% 61%;
+    --accent-foreground: 271 86% 18%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 271 20% 90%;
+    --input: 271 20% 90%;
+    --ring: 45 100% 61%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+.gradient-background {
+  background: linear-gradient(135deg, #ffe1e1 0%, #ffe5d9 25%, #fff3d9 50%, #ffe5d9 75%, #ffe1e1 100%);
+}
+
+.wave-background {
+  display: none;
+}
+
+.hero-text {
+  @apply text-[2.75rem] leading-[1.1] font-bold md:text-6xl lg:text-7xl;
+  background: linear-gradient(to right, #2a0b53, #3b1674);
+  -webkit-background-clip: text;
+}
+
+.feature-card {
+  @apply p-6 rounded-xl border bg-white/50 backdrop-blur-sm hover:bg-white/80 transition-colors;
+}
+
+.testimonial-card {
+  @apply p-6 rounded-xl border bg-white shadow-sm;
+}
+
