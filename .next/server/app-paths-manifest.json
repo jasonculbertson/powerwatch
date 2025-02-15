@@ -1,3 +1,20 @@
 {
-  "/admin/page": "app/admin/page.js"
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/submit-bill/route": "app/api/submit-bill/route.js",
+  "/api/parse-pdf/route": "app/api/parse-pdf/route.js",
+  "/example2/page": "app/example2/page.js",
+  "/api/upload/route": "app/api/upload/route.js",
+  "/example1/page": "app/example1/page.js",
+  "/full-results/page": "app/full-results/page.js",
+  "/input/page": "app/input/page.js",
+  "/payment/page": "app/payment/page.js",
+  "/page": "app/page.js",
+  "/processing/page": "app/processing/page.js",
+  "/results/page": "app/results/page.js",
+  "/upload/page": "app/upload/page.js",
+  "/confirmation/page": "app/confirmation/page.js",
+  "/admin/login/page": "app/admin/login/page.js",
+  "/admin/test/dashboard/page": "app/admin/test/dashboard/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/admin/test/page": "app/admin/test/page.js"
 }

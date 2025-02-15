@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { initPdfLib } from './pdf.config';
+import { parsePdf } from './pdf.config';
 
 // Helper function to create consistent JSON responses
 function createJsonResponse(data: any, status: number = 200) {
@@ -84,8 +84,7 @@ export async function POST(request: NextRequest) {
       console.error('Error downloading PDF:', downloadError);
       return createJsonResponse({
         error: 'Failed to download PDF',
-        details: downloadError.message,
-        code: downloadError.code || 'UNKNOWN_ERROR'
+        details: downloadError.message
       }, 500);
     }
     
@@ -110,98 +109,33 @@ export async function POST(request: NextRequest) {
     console.log('Loading PDF with PDF.js...');
     
     try {
-      // Initialize PDF.js with Node.js configuration
-      const pdfLib = await initPdfLib();
+      // Parse the PDF using pdf-parse
+      const result = await parsePdf(uint8Array);
       
-      // Load the PDF document with minimal configuration
-      const loadingTask = pdfLib.getDocument({
-        data: uint8Array,
-        verbosity: 0
-      });
+      console.log('PDF parsed successfully');
+      console.log('PDF loaded, pages:', result.numPages);
       
-      console.log('PDF loading task created');
-      const pdfDocument = await loadingTask.promise;
-      console.log('PDF loaded, pages:', pdfDocument.numPages);
-      
-      // Get metadata
-      const metadata = await pdfDocument.getMetadata().catch(err => ({
-        info: {},
-        metadata: {}
+      // Split the text into pages based on form feed characters or double newlines
+      const pageTexts = result.text.split(/\f|\n\n+/);
+      const pages = pageTexts.map((content, index) => ({
+        pageNumber: index + 1,
+        content: content.trim() || '[No text content found]'
       }));
       
-      console.log('Metadata loaded:', metadata);
-      
-      // Extract text from each page
-      const pages = [];
-      for (let i = 1; i <= pdfDocument.numPages; i++) {
-        console.log(`Processing page ${i}/${pdfDocument.numPages}`);
-        const page = await pdfDocument.getPage(i);
-        
-        try {
-          const textContent = await page.getTextContent();
-          
-          // Process text items
-          const pageText = textContent.items
-            .map((item: any) => item.str)
-            .join(' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          
-          pages.push({
-            pageNumber: i,
-            content: pageText || '[No text content found]'
-          });
-        } catch (pageError) {
-          console.error(`Error processing page ${i}:`, pageError);
-          pages.push({
-            pageNumber: i,
-            content: `[Error processing page ${i}]`,
-            error: pageError.message
-          });
-        }
-      }
-      
-      // Combine all text for raw content
-      const rawContent = pages
-        .map(p => p.content)
-        .filter(content => content !== '[No text content found]')
-        .join('\n\n');
+      console.log('Text content processed into pages');
       
       return createJsonResponse({
-        success: true,
         pages,
-        metadata: {
-          title: metadata.info?.Title || '',
-          author: metadata.info?.Author || '',
-          subject: metadata.info?.Subject || '',
-          keywords: metadata.info?.Keywords || '',
-          creator: metadata.info?.Creator || '',
-          producer: metadata.info?.Producer || '',
-          pageCount: pdfDocument.numPages,
-          version: metadata.info?.PDFFormatVersion,
-          encrypted: metadata.info?.IsEncrypted || false
-        },
-        rawContent: rawContent || '[No text content found]'
+        metadata: result.metadata,
+        info: result.info,
+        numPages: result.numPages,
+        version: result.version
       });
     } catch (error) {
-      console.error('PDF.js processing error:', error);
-      throw error; // Let the outer catch handle it
-    }
-
-  } catch (error) {
-    console.error('Error parsing PDF:', error);
-    // Provide more detailed error information
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    
-    return NextResponse.json(
-      { 
+      console.error('Error parsing PDF:', error);
+      return createJsonResponse({ 
         error: 'Failed to parse PDF',
-        details: errorMessage,
-        stack: errorStack,
-        timestamp: new Date().toISOString()
-      },
-      { status: 500 }
-    );
-  }
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, 500);
+    }
 }
