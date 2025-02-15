@@ -31,7 +31,7 @@ export function BillDownloadGuide() {
         </div>
         <div className="relative aspect-[16/10] rounded-lg overflow-hidden border">
           <Image
-            src="https://sjc.microlink.io/dc-VF2I4unTXM8wELKIRPv4PW5mOEv-iVQZmsZvTV86OEnx4rh2K6VwFcxvuOwNgAbaUx8Qy7YYuCFYMuoWswg.jpeg"
+            src="/images/pge-bill-download.png"
             alt="PG&E website screenshot showing where to find your bill"
             fill
             className="object-cover"
