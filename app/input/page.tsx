@@ -3,25 +3,35 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { HelpCircle, Upload, FileText, X, FileIcon, Mail, ArrowLeft, ArrowRight } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { BillDownloadGuide } from "@/components/bill-download-guide"
 import { Stepper } from "@/components/ui/stepper"
 
+type RateSchedule = {
+  id: string
+  name: string
+  description: string
+  season: 'Winter' | 'Summer' | 'All Year'
+}
+
+const RATE_SCHEDULES: RateSchedule[] = [
+  { id: 'E-1-ALL', name: 'E-1', description: 'Flat Rate (Tiered Pricing)', season: 'All Year' },
+  { id: 'E-TOU-C-W', name: 'E-TOU-C', description: 'Time-of-Use (4-9pm Peak)', season: 'Winter' },
+  { id: 'E-TOU-C-S', name: 'E-TOU-C', description: 'Time-of-Use (4-9pm Peak)', season: 'Summer' },
+  { id: 'E-TOU-D-W', name: 'E-TOU-D', description: 'Time-of-Use (3-8pm Peak)', season: 'Winter' },
+  { id: 'E-TOU-D-S', name: 'E-TOU-D', description: 'Time-of-Use (3-8pm Peak)', season: 'Summer' },
+  { id: 'EV2-A-W', name: 'EV2-A', description: 'Time-of-Use (EV Owners)', season: 'Winter' },
+  { id: 'EV2-A-S', name: 'EV2-A', description: 'Time-of-Use (EV Owners)', season: 'Summer' },
+]
+
 interface BillData {
   name: string
   email: string
-  total_usage: string
-  adu: string
+  rate_schedule: string
   peak_kwh: string
   offpeak_kwh: string
-  peak_cost: string
-  offpeak_cost: string
-  current_electric: string
-  current_gas: string
-  total_amount: string
-  peak_hours: string
-  offpeak_hours: string
 }
 
 export default function InputForm() {
@@ -33,17 +43,9 @@ export default function InputForm() {
   const [billData, setBillData] = useState<BillData>({
     name: "",
     email: "",
-    total_usage: "",
-    adu: "",
+    rate_schedule: "",
     peak_kwh: "",
     offpeak_kwh: "",
-    peak_cost: "",
-    offpeak_cost: "",
-    current_electric: "",
-    current_gas: "",
-    total_amount: "",
-    peak_hours: "",
-    offpeak_hours: "",
   })
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -103,34 +105,84 @@ export default function InputForm() {
     setIsSubmitting(true)
 
     try {
+      // First, upload the PDF if present
+      let pdfPath = null
+      if (inputMethod === "upload" && file) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}-${Math.random()}.${fileExt}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('pdfs')
+          .upload(fileName, file)
+
+        if (uploadError) throw uploadError
+        pdfPath = fileName
+      }
+
+      // Insert into submissions table
+      const { data: submissionData, error: submissionError } = await supabase
+        .from('submissions')
+        .insert([
+          {
+            name: billData.name,
+            email: billData.email,
+            pdf_path: pdfPath,
+            // Only include energy data if it's a manual entry
+            ...(inputMethod === 'manual' ? {
+              rate_schedule: billData.rate_schedule,
+              peak_kwh: billData.peak_kwh ? parseFloat(billData.peak_kwh) : null,
+              offpeak_kwh: billData.offpeak_kwh ? parseFloat(billData.offpeak_kwh) : null
+            } : {
+              rate_schedule: null,
+              peak_kwh: null,
+              offpeak_kwh: null
+            })
+          }
+        ])
+        .select()
+        .single()
+
+      if (submissionError) throw submissionError
+
+      // Send email notification
       const formData = new FormData()
       formData.append("name", billData.name)
       formData.append("email", billData.email)
 
-      if (inputMethod === "upload" && file) {
+      if (file) {
         formData.append("file", file)
-      } else {
-        Object.entries(billData).forEach(([key, value]) => {
-          formData.append(key, value)
-        })
-      }
-
-      const response = await fetch("/api/submit-bill", {
-        method: "POST",
-        body: formData,
+      } 
+      
+      // Add all the bill data to the email
+      Object.entries(billData).forEach(([key, value]) => {
+        if (value) {
+          formData.append(key, value.toString())
+        }
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Submission failed")
-      }
+      // Send email notification and wait for it to complete
+      try {
+        const response = await fetch("/api/submit-bill", {
+          method: "POST",
+          body: formData,
+        });
 
-      router.push("/confirmation")
+        if (!response.ok) {
+          console.error("Failed to send email notification, but data was saved");
+        }
+
+        // Only navigate after email attempt is complete
+        router.replace("/confirmation");
+      } catch (emailError) {
+        console.error("Failed to send email notification, but data was saved:", emailError);
+        // Still navigate even if email fails
+        router.replace("/confirmation");
+      }
     } catch (error) {
-      console.error("Submission error:", error)
-      setSubmitError(error instanceof Error ? error.message : "An unexpected error occurred. Please try again.")
+      console.error("Submission error:", error);
+      setSubmitError(error instanceof Error ? error.message : "An unexpected error occurred. Please try again.");
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
 
@@ -288,50 +340,48 @@ export default function InputForm() {
                   ) : (
                     <>
                       <div className="rounded-lg border bg-card/50 p-6">
-                        <h2 className="mb-4 text-lg font-semibold">Usage Information</h2>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
+                        <h2 className="mb-4 text-lg font-semibold">Rate Schedule</h2>
+                        <div className="grid gap-4">
+                          <div className="max-w-md">
                             <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Total Usage (kWh)
-                              {renderTooltip("Total electricity usage for the billing period")}
+                              Select Rate Schedule
+                              {renderTooltip("Choose your PG&E rate schedule and season")}
                             </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={billData.total_usage}
-                              onChange={handleInputChange("total_usage")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Average Daily Usage (kWh/day)
-                              {renderTooltip("Average daily electricity usage")}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={billData.adu}
-                              onChange={handleInputChange("adu")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              required
-                            />
+                            <div className="relative">
+                              <select
+                                value={billData.rate_schedule}
+                                onChange={handleInputChange("rate_schedule")}
+                                className="w-full rounded-lg border bg-background px-3 py-2 pr-8 text-sm appearance-none"
+                                required
+                              >
+                                <option value="">Select a rate schedule...</option>
+                                {RATE_SCHEDULES.map((rate) => (
+                                  <option key={rate.id} value={rate.id}>
+                                    {rate.name} - {rate.description} ({rate.season})
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                                <svg className="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
 
                       <div className="rounded-lg border bg-card/50 p-6">
-                        <h2 className="mb-4 text-lg font-semibold">Time-of-Use Details</h2>
+                        <h2 className="mb-4 text-lg font-semibold">Energy Charges</h2>
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
                             <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Peak Hours Usage (kWh)
+                              Peak Usage (kWh)
                               {renderTooltip("Electricity used during peak hours")}
                             </label>
                             <input
                               type="number"
-                              step="0.01"
+                              step="0.000001"
                               value={billData.peak_kwh}
                               onChange={handleInputChange("peak_kwh")}
                               className="w-full rounded-lg border bg-background p-2 text-sm"
@@ -340,124 +390,23 @@ export default function InputForm() {
                           </div>
                           <div>
                             <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Off-Peak Hours Usage (kWh)
+                              Off-Peak Usage (kWh)
                               {renderTooltip("Electricity used during off-peak hours")}
                             </label>
                             <input
                               type="number"
-                              step="0.01"
+                              step="0.000001"
                               value={billData.offpeak_kwh}
                               onChange={handleInputChange("offpeak_kwh")}
                               className="w-full rounded-lg border bg-background p-2 text-sm"
                               required
                             />
                           </div>
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Peak Hours
-                              {renderTooltip("Time range for peak hours (e.g., '4PM-9PM')")}
-                            </label>
-                            <input
-                              type="text"
-                              value={billData.peak_hours}
-                              onChange={handleInputChange("peak_hours")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              placeholder="e.g., 4PM-9PM"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Off-Peak Hours
-                              {renderTooltip("Time range for off-peak hours (e.g., '9PM-4PM')")}
-                            </label>
-                            <input
-                              type="text"
-                              value={billData.offpeak_hours}
-                              onChange={handleInputChange("offpeak_hours")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              placeholder="e.g., 9PM-4PM"
-                              required
-                            />
-                          </div>
+
                         </div>
                       </div>
 
-                      <div className="rounded-lg border bg-card/50 p-6">
-                        <h2 className="mb-4 text-lg font-semibold">Cost Breakdown</h2>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Peak Hours Cost ($)
-                              {renderTooltip("Cost of electricity used during peak hours")}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={billData.peak_cost}
-                              onChange={handleInputChange("peak_cost")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Off-Peak Hours Cost ($)
-                              {renderTooltip("Cost of electricity used during off-peak hours")}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={billData.offpeak_cost}
-                              onChange={handleInputChange("offpeak_cost")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Total Electric Charges ($)
-                              {renderTooltip("Total electricity charges for the billing period")}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={billData.current_electric}
-                              onChange={handleInputChange("current_electric")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Total Gas Charges ($)
-                              {renderTooltip("Total gas charges for the billing period")}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={billData.current_gas}
-                              onChange={handleInputChange("current_gas")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              required
-                            />
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                              Total Bill Amount ($)
-                              {renderTooltip("Total amount due for both electricity and gas")}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={billData.total_amount}
-                              onChange={handleInputChange("total_amount")}
-                              className="w-full rounded-lg border bg-background p-2 text-sm"
-                              required
-                            />
-                          </div>
-                        </div>
-                      </div>
+
                       <div className="rounded-lg border bg-muted p-4 text-sm text-muted-foreground">
                         <Mail className="mb-2 h-5 w-5" />
                         <p>

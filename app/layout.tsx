@@ -1,6 +1,7 @@
 import "./globals.css"
 import { Inter } from "next/font/google"
 import { ProgressProvider } from "@/components/providers/progress-provider"
+import { AuthProvider } from "@/lib/auth-context"
 import Link from "next/link"
 import type React from "react"
 
@@ -19,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <AuthProvider>
         <ProgressProvider>
           <div className="min-h-screen gradient-background">
             <header className="py-4">
@@ -35,6 +37,7 @@ export default function RootLayout({
             <main>{children}</main>
           </div>
         </ProgressProvider>
+        </AuthProvider>
       </body>
     </html>
   )
