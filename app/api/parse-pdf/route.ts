@@ -138,4 +138,11 @@ export async function POST(request: NextRequest) {
         details: error instanceof Error ? error.message : 'Unknown error'
       }, 500);
     }
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return createJsonResponse({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
 }

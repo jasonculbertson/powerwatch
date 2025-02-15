@@ -186,7 +186,7 @@ export default function InputForm() {
     }
   }
 
-  const handleInputChange = (field: keyof BillData) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (field: keyof BillData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setBillData((prev) => ({
       ...prev,
       [field]: e.target.value,
